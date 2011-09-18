@@ -1,0 +1,14 @@
+{
+  "name": "Bisú no MercadoLivre",
+  "version": "0.1",
+  "description": "Fica de olho em resultados de busca do MercadoLivre. Avisa você quando surgirem novos produtos.",
+  "background_page": "background.html",
+  "browser_action": {
+    "default_icon": "icon.gif",
+    "popup": "popup.html"
+  },
+  "permissions": [
+    "http://*.mercadolivre.com.br/",
+    "tabs"
+  ]
+}

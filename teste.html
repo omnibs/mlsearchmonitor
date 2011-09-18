@@ -1,0 +1,264 @@
+roadmap:
+        [] fechar bonitinho
+            > botar de volta dentro do span e usar hover pra trocar imagem
+        [] fechar funcional
+            > mensagem pra BG
+            > tirar da lista de SearchTasks
+        [] quebrar linha
+            > ul com li em display:inline quebra, ja vi numa pagina
+            > pq diabos nao ta quebrando aqui?
+        [] mover
+            http://jqueryui.com/demos/draggable/#
+        [] ao adicionar busca avisar "abra novamente para ver os resultados"
+        [] ignorar url de produto no Busca Detectada
+        [] qtd atualizacoes
+        [] minificar tudo
+        [] publicar
+
+<div class="Tabs">
+
+    <span class="tab-item key_1a2c6c80a132a82d9360499bba6f8bb0 selected" style="border: 1px solid lightgray; border-radius: 3px; padding-left: 3px; padding-right: 15px;">motu<span class="new-items"></span></span>
+    <span style="border: none; margin-left: -20px;   margin-right: -3px;"><img src="close.png" style="  vertical-align: -3px;"></span>                                                                                  
+</div>
+
+        -------backup-----------
+
+
+<style>
+    body {
+        min-width:357px;
+        overflow-x:hidden;
+        font-size:18px;
+        font-family: Arial, sans-serif;
+    }
+    .ControlPane{
+        border-bottom: 1px solid lightgray;
+        padding: 5px;
+        margin-right: 20px;
+    }
+    .BtnAdicionar{
+        /*border: 1px solid lightgray;
+        background-color: darkblue;
+        color: lightgray;
+        text-align: center;*/
+        /*font-size:16px;*/
+        height:20px;
+    }
+    .container-item-new{
+        background-color: #FCD;
+    }
+    .Tabs {
+        min-height: 20px;
+        margin: 1px;
+    }
+    .selected {
+        background-color: #EEE !important;
+        cursor: default !important;
+    }
+    .Tabs li{
+        float:left;
+        margin-top: 5px;
+        border: 1px solid lightgray;
+        border-radius: 3px;
+        padding-left: 5px;
+        padding-right: 15px;
+        cursor: pointer;
+    }
+    .Tabs li:hover {
+        background-color: #abd;
+    }
+
+    .DetalhesBusca span{
+        font-size: 14px;
+    }
+    .Detalhesbusca{
+        margin-top:5px;
+        margin-bottom:5px;
+    }
+    .BuscaDetectada{
+        color: red;
+        text-align: center;
+        font-size: 16px;
+        background-color: #EEE;
+        border: 1px solid #CCC;
+        border-radius: 3px;
+    }
+    .DescricaoNecessaria{
+        color: red;
+    }
+    .AvisoBusca{
+        background-color: #EEE;
+        border-radius: 3px;
+        padding: 5px;
+        border: 1px solid #CCC;
+    }
+</style>
+<link rel="stylesheet" type="text/css" href="mercadolivre.css">
+<script src="jquery.js"></script>
+<script src="md5.js"></script>
+<script src="storageManager.js"></script>
+<script src="TimeSpan1.2.min.js"></script>
+<script src="utils.js"></script>
+<script>
+    var urlBusca=null;
+    window.addEventListener("load", popupInit, false);
+    var storageManagers = {};
+    function popupInit(){
+        //ver se a aba atual é busca ML
+        chrome.tabs.getSelected(null, function(tab) {
+            if (tab.url.match(/http\:\/\/[a-z]+.mercadolivre.com.br\/.*/) && !tab.url.match(/http\:\/\/www.mercadolivre.com.br\/.*/)){
+                $(".NoSearchAvailable").hide();
+                $(".CanAddSearch").show();
+                urlBusca = tab.url;
+                var title = tab.title;
+                if(!title || title.length == 0)
+                    title = urlBusca;
+                var favicon = tab.favIconUrl;
+                if (favicon &&favicon.length > 0)
+                    $(".DetalhesBusca").append($('<img src="'+favicon+'" style="height:20px;width:20px;margin-right:5px;vertical-align:bottom;"/>'));
+                $(".DetalhesBusca").append($('<a href="'+urlBusca+'" target="_blank" style="vertical-align:center">'+title+'</a>'));
+            }else{
+                $(".NoSearchAvailable").show();
+                $(".CanAddSearch").hide();
+            }
+            $(".Loading").hide();
+        });
+        //ações dos botões
+        $(".BtnAdicionar").click(function(){
+            $("#DescricaoNecessaria").hide();
+            var descricao = $("#DescricaoNovaBusca").val();
+            if (descricao.length < 1){
+                $("#DescricaoNecessaria").show();
+                return;
+            }
+            chrome.extension.sendRequest({method: "send_new_task", searchUrl: urlBusca, description: descricao});
+        });
+        chrome.extension.sendRequest({method: "request_tasks"}, function(response) {
+            if (response.data instanceof Array){
+                var first = true;
+                for (i in response.data){
+                    var item = response.data[i];
+                    addTab(item.url, item.description, first);
+                    addContainer(item.url);
+                    readResults(item.url);
+                    first = false;
+                }
+            }
+            else
+                console.log("erro: resposta estranha de request_tasks");
+        });
+    }
+    function addTab(url, description, selected){
+        var elmt = $(document.createElement("li"))
+                .addClass("tab-item")
+                .addClass("key_"+hex_md5(url))
+                .click(tabItem_Click)
+                .append(description)
+                .append($(document.createElement("span")).addClass("new-items"));
+        if (selected)
+            elmt.addClass("selected");
+        $(".Tabs").append(elmt);
+        var closeBtn = '<li style="border: none; margin-left: -16px; padding: 0px;  margin-top: 7px;"><img src="close.png" style="  vertical-align: bottom;"></li>';
+        $(".Tabs").append($(closeBtn));
+    }
+    function addContainer(url){
+        $(".Containers").append(
+            $(document.createElement("div"))
+                .addClass("container")
+                .addClass("container_"+hex_md5(url))
+        );
+    }
+    function readResults(url){
+        //get from the local storage
+        var key = hex_md5(url);
+        var sm;
+        if(!(storageManagers[key] instanceof MLStorage)){
+            storageManagers[key] = new MLStorage(url);
+        }
+        sm = storageManagers[key];
+        sm.reload();
+        console.log(sm);
+
+        //dump in an array to sort by date
+        var items = new Array();
+        for (i in sm.productList) {
+            var itemUrl = sm.productList[i];
+            if (itemUrl == null)
+                continue;
+            var product = sm.products[itemUrl];
+            console.log(itemUrl + "-> "+ product);
+            items.push(product);
+        }
+        if (items.length == 0)
+            return;
+
+        items.sort(function (a,b){
+            //TODO: not working, price is like "R$ 102.938,00"
+            //if (a.dateUpdated == b.dateUpdated)
+            //    return b.price - a.price;
+            return b.dateUpdated - a.dateUpdated;
+        });
+
+        var lastMostRecent = localStorage["mercadolivre_search_robot_lastMostRecent_"+key];
+        localStorage["mercadolivre_search_robot_lastMostRecent_"+key] = items[0].dateUpdated;
+
+        //throw 'em to the screen, finally
+        for (i in items) {
+            var item = items[i];
+            var itemHtml = $(item.html);
+            //so that a hrefs will work
+            $("a",itemHtml).attr("target","_blank");
+            addTimeStamp(itemHtml,item.context,item.url, item.dateUpdated, item.dateAdded);
+            if (item.dateUpdated > lastMostRecent)
+                itemHtml.addClass("container-item-new");
+            $(".container_" + key).append(itemHtml);
+        }
+    }
+    function addTimeStamp(html, context, url, dateUpdated, dateAdded){
+        $(".extra-info",html).append("<br/>").append(
+                $(document.createElement("li"))
+                    .attr("style","font-size:12px;font-weight:bold;color:darkgreen;background-color:#EEE;border:1px solid #CCC;border-radius:3px;padding:3px;")
+                    .html("Visto " + friendlyDate(dateUpdated))
+        );
+
+    }
+    function tabItem_Click(){
+        var elem = $(this);
+        if (elem.hasClass("selected"))
+            return;
+        elem.siblings().removeClass("selected");
+        elem.addClass("selected");
+        var classes = elem.attr("class").split(" ");
+        for (i in classes){
+            var class = classes[i];
+            if (class.indexOf("key_") == 0){
+                class = class.replace("key_","");
+                $(".Containers > .container").hide();
+                $(".container_"+class).show();
+            }
+        }
+    }
+</script>
+<div class="ControlPane">
+    <div class="Loading">Carregando, aguarde...</div>
+    <div class="AvisoBusca NoSearchAvailable" style="display:none">
+        <img src="Information.png" style="height:20px;width:20px;margin-right:5px;"/>
+        <span style="vertical-align: top">Para monitorar novas buscas, faça uma busca no <a href="http://www.mercadolivre.com.br" target="_blank" style="vertical-align: top">MercadoLivre</a> e clique novamente nessa extensão.</span>
+    </div>
+
+    <div class="BuscaDetectada CanAddSearch" style="display: none">Busca Detectada!</div>
+    <div class="DetalhesBusca CanAddSearch" style="display:none">
+    </div>
+    <span class="DescricaoNovaBusca CanAddSearch" style="display:none">
+        <label for="DescricaoNovaBusca">Descrição:</label>
+        <input id="DescricaoNovaBusca" />
+        <span class="BtnAdicionar btn secondary ml-main-header-search-button CanAddSearch" style="height:20px;display:none"><span>Monitorar Busca Atual</span></span>
+        <span id="DescricaoNecessaria" class="DescricaoNecessaria" style="display:none">Escreva uma descrição simples para essa busca.</span>
+    </span>
+    <ul class="Tabs">
+
+    </ul>
+</div>
+<div class="Containers">
+
+</div>

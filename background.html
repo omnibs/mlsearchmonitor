@@ -1,0 +1,188 @@
+<script src="jquery.js"></script>
+<script src="storageManager.js"></script>
+<script src="utils.js"></script>
+
+<script>
+    function SearchTask(urlToSearch) {
+        this.description = null;
+        this.url = urlToSearch;
+        this.mlStorage = new MLStorage(this.url);
+        this.doSearch = function () {
+            var date = new Date();
+            console.log("["+date.getHours()+":"+date.getMinutes()+"] starting search on "+this.url);
+            $.get(this.url, bind(this,this.doSearch_CallBack))
+        };
+        this.doSearch_CallBack = function(data) {
+            var mercadoLivrePage = new MercadoLivrePage();
+            mercadoLivrePage.html = data;
+            mercadoLivrePage.context = this.url;
+            this.getResults(mercadoLivrePage);
+            this.doSearchNextPage(mercadoLivrePage);
+        };
+        this.doSearchNextPage = function (mercadoLivrePage) {
+            var nextPage = mercadoLivrePage.getNextSearchPage();
+            if (nextPage) {
+                $.get(nextPage, this.doSearch_CallBack)
+            }
+            else {
+                this.endSearch();
+            }
+        };
+        this.endSearch = function(){
+            var date = new Date();
+            console.log("["+date.getHours()+":"+date.getMinutes()+"] ended search on "+this.url);
+            this.mlStorage.persist();
+        };
+        this.getResults = function (mercadoLivrePage) {
+            var links = mercadoLivrePage.getProductLinks();
+            for (var i in links) {
+                var productStored = this.mlStorage.getProduct(links[i]);
+                var productOnPage = mercadoLivrePage.getProduct(links[i]);
+                //se é produto novo
+                if (!productStored) {
+                    productOnPage.dateAdded = productOnPage.dateUpdated = (new Date()).getTime();
+                    productOnPage.context = this.url;
+                    this.mlStorage.addProduct(productOnPage);
+                }
+                //se já tem o produto, ver se mudou e então atualizar
+                else {
+                    productOnPage.dateUpdated = productStored.dateUpdated; //pq sempre iria diferir
+                    productOnPage.dateAdded = productStored.dateAdded;
+                    productOnPage.context = this.url;
+                    if (JSON.stringify(productStored) != JSON.stringify(productOnPage)) {
+                        productOnPage.dateUpdated = (new Date()).getTime();
+                        this.mlStorage.addProduct(productOnPage);
+                    }
+                }
+            }
+        };
+        //reload values from local storage
+        this.mlStorage.reload();
+    }
+    function MercadoLivrePage() {
+        this.html = null;
+        this.context = null;
+        this.getNextSearchPage = function () {
+            var result = Unique($('a[href^="' + this.url + '_Desde_"]', this.html).map(
+                    function() {
+                        return $(this).attr("href");
+                    }).get());
+            if (result.length > 0)
+                return result[result.length - 1];
+            return null;
+        };
+
+        this.getProductLinks = function() {
+            return Unique($('a[href^="http://produto.mercadolivre.com.br"]', this.html).map(
+                    function() {
+                        return $(this).attr("href");
+                    }).get());
+        };
+        this.getProduct = function(link) {
+            var product = new MLProduct();
+            product.context = this.context;
+            product.url = link;
+            var productListViewItem = $('#searchResults .list-view-item:has(a[href^="'+link+'"])',this.html);
+            var priceText = $(".price-info-cost .price",productListViewItem).text().trim();
+            product.price = priceText.substr(0,priceText.length-2) + "," + priceText.substr(priceText.length-2,2);
+            product.description = $(".list-view-item-title a",productListViewItem).text().trim();
+            product.html = productListViewItem.outerHTML();
+            return product;
+        }
+    }
+
+    function SearchTaskManager(){
+        this.searchTasks = new Array();
+        this._keyPreffix = "mercadolivre_search_robot";
+        this._tasksKey = this._keyPreffix + "_tasks";
+        this.intervalId = null;
+        this.save = function() {
+            //create an url/description object for each task, to avoid wasting storage
+            var tasksForPersistance = this.taskDescriptiveArray();
+            localStorage[this._tasksKey] = JSON.stringify(tasksForPersistance);
+        };
+        this.taskDescriptiveArray = function(){
+            var taskArray = new Array();
+            for (i in this.searchTasks) {
+                var currentTask = this.searchTasks[i];
+                if (currentTask instanceof SearchTask){
+                    var task = new Object();
+                    task.url = currentTask.url;
+                    task.description = currentTask.description;
+                    taskArray.push(task);
+                }
+            }
+            return taskArray;
+        };
+        this.reload = function() {
+            var stored = localStorage[this._tasksKey];
+            if (stored) {
+                stored = JSON.parse(stored);
+                if (stored instanceof Array) {
+                    var taskArray = new Array();
+                    for (i in stored){
+                        if (stored[i].url) {
+                            var newTask = new SearchTask(stored[i].url);
+                            newTask.description = stored[i].description;
+                            taskArray.push(newTask);
+                        }
+                    }
+                    this.searchTasks = taskArray;
+                }
+                else
+                    console.log("erro: algo estranho no lugar do Array de searchtasks.");
+            }
+        };
+        this.runAll = function(){
+            if (this.intervalId)
+                clearInterval(this.intervalId);
+            this.runAllOnce();
+            this.intervalId = setInterval(function() {
+                taskManager.runAllOnce();
+            }, getIntervalTime());
+        };
+        this.runAllOnce = function(){
+            for (i in this.searchTasks) {
+                var task = this.searchTasks[i];
+                if (task instanceof SearchTask)
+                    task.doSearch();
+            }
+        }
+    }
+
+    chrome.extension.onRequest.addListener(function(request, sender, sendResponse) {
+        // From content script.
+        if (request.method == "request_tasks")
+            sendResponse({data: taskManager.taskDescriptiveArray()});
+        else if (request.method == "send_new_task"){
+            var newTask = new SearchTask(request.searchUrl);
+            newTask.description = request.description;
+            taskManager.searchTasks.push(newTask);
+            taskManager.save();
+            taskManager.runAll();
+        }
+        else
+            sendResponse({}); // snub them.
+    });
+
+    function getIntervalTime(){
+        if (localStorage["mercadolivre_search_robot_interval"])
+            return 1000 * 60 * localStorage["mercadolivre_search_robot_interval"];
+        return 1000 * 60 * 5;
+    }
+
+    var taskManager = new SearchTaskManager();
+    taskManager.reload();
+    taskManager.runAll();
+
+    testando = false;
+    if (testando){
+        var teste = new SearchTask("http://lista.mercadolivre.com.br/audio-profissional-gravadores-placas/tascam-us800");
+        teste.description = "______teste";
+        //taskManager.searchTasks.push(teste);
+        teste.doSearch();
+    }
+
+    //http://stackoverflow.com/questions/4930439/call-jquery-ajax-request-each-x-minutes
+    //como fazer o timer
+</script>
