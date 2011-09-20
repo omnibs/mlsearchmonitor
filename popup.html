@@ -24,6 +24,7 @@
     .Tabs {
         min-height: 20px;
         margin: 1px;
+        padding-right: 120px;
     }
     .selected {
         background-color: #EEE !important;
@@ -206,6 +207,7 @@
         if (elem.hasClass("selected"))
             return;
         elem.siblings().removeClass("selected");
+        elem.parent().descendants().removeClass("selected");
         elem.addClass("selected");
         var classes = elem.attr("class").split(" ");
         for (i in classes){
