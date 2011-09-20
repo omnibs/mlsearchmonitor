@@ -207,7 +207,7 @@
         if (elem.hasClass("selected"))
             return;
         elem.siblings().removeClass("selected");
-        elem.parent().descendants().removeClass("selected");
+        elem.parents(".Tabs").find(".selected").removeClass("selected");
         elem.addClass("selected");
         var classes = elem.attr("class").split(" ");
         for (i in classes){
