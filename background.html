@@ -1,6 +1,8 @@
 <script src="jquery.js"></script>
+<script src="md5.js"></script>
 <script src="storageManager.js"></script>
 <script src="utils.js"></script>
+
 
 <script>
     function SearchTask(urlToSearch) {
@@ -56,6 +58,12 @@
                 }
             }
         };
+        //removes the current SearchTask from the storage
+        this.remove = function() {
+            var mlStorage = this.mlStorage;
+            this.mlStorage = undefined;
+            mlStorage.clear();
+        }
         //reload values from local storage
         this.mlStorage.reload();
     }
@@ -101,7 +109,9 @@
             var tasksForPersistance = this.taskDescriptiveArray();
             localStorage[this._tasksKey] = JSON.stringify(tasksForPersistance);
         };
-        this.taskDescriptiveArray = function(){
+        //creates an array of objects with description and url for all current tasks
+        // so they can be saved on the local storage
+        this.taskDescriptiveArray = function() {
             var taskArray = new Array();
             for (i in this.searchTasks) {
                 var currentTask = this.searchTasks[i];
@@ -114,6 +124,7 @@
             }
             return taskArray;
         };
+        //loads SearchTasks from localStorage and instantiates them
         this.reload = function() {
             var stored = localStorage[this._tasksKey];
             if (stored) {
@@ -133,6 +144,7 @@
                     console.log("erro: algo estranho no lugar do Array de searchtasks.");
             }
         };
+        //runs all and sets up timer to run from time to time
         this.runAll = function(){
             if (this.intervalId)
                 clearInterval(this.intervalId);
@@ -141,12 +153,24 @@
                 taskManager.runAllOnce();
             }, getIntervalTime());
         };
+        //runs all only once, is used by runAll to run from time to time
         this.runAllOnce = function(){
             for (i in this.searchTasks) {
                 var task = this.searchTasks[i];
                 if (task instanceof SearchTask)
                     task.doSearch();
             }
+        };
+        this.removeTask = function(url){
+            for (i in this.searchTasks) {
+                if (this.searchTasks[i].url == url){
+                    this.searchTasks[i].remove();
+                    this.searchTasks.splice(i,1);
+                    this.save();
+                    return;
+                }
+            }
+            throw "search task not found trying to remove";
         }
     }
 
@@ -161,9 +185,24 @@
             taskManager.save();
             taskManager.runAll();
         }
+        else if (request.method == "send_delete_task"){
+            var urlHash = request.key;
+
+            var url = getUrlFromHash(urlHash);
+            taskManager.removeTask(url);
+        }
         else
             sendResponse({}); // snub them.
     });
+
+    function getUrlFromHash(urlHash){
+        for (i in taskManager.searchTasks){
+            if (hex_md5(taskManager.searchTasks[i].url) == urlHash){
+                return taskManager.searchTasks[i].url;
+            }
+        }
+        throw "given key does not match any of the search tasks";
+    }
 
     function getIntervalTime(){
         if (localStorage["mercadolivre_search_robot_interval"])

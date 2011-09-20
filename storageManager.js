@@ -51,6 +51,10 @@ function MLStorage(context) {
                     console.log("erro: algo estranho no lugar de " + this._productsKey);
         }
     };
+    this.clear = function() {
+        localStorage.removeItem(this._productListKey);
+        localStorage.removeItem(this._productsKey);
+    }
 }
 function MLProduct() {
     this.context = null; //this is the URL of the search where this product was obtained

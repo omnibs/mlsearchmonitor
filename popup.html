@@ -138,7 +138,7 @@
             elmt.addClass("selected");
         tabElement.append(elmt);
         var closeBtn = '<span style="border: none; margin-left: -16px; padding: 0px;  margin-top: 7px;"><img src="close.png" style="  vertical-align: bottom;"></span>';
-        tabElement.append($(closeBtn));
+        tabElement.append($(closeBtn).click(removeTab_Click));
         $(".Tabs").append(tabElement);
     }
     function addContainer(url){
@@ -200,22 +200,35 @@
                     .attr("style","font-size:12px;font-weight:bold;color:darkgreen;background-color:#EEE;border:1px solid #CCC;border-radius:3px;padding:3px;")
                     .html("Visto " + friendlyDate(dateUpdated))
         );
-
     }
     function tabItem_Click(){
         var elem = $(this);
         if (elem.hasClass("selected"))
             return;
-        elem.siblings().removeClass("selected");
+        //elem.siblings().removeClass("selected");
         elem.parents(".Tabs").find(".selected").removeClass("selected");
         elem.addClass("selected");
+
+        $(".Containers > .container").hide();
+        $(".container_"+getTabItemKey(elem)).show();
+
+    }
+
+    function removeTab_Click(){
+        var elem = $(this);
+        var key = getTabItemKey(elem.parent().find(".tab-item"));
+        elem.parent().remove();
+        $(".container_" + key).remove();
+        localStorage.removeItem("mercadolivre_search_robot_lastMostRecent_" + key);
+        chrome.extension.sendRequest({method: "send_delete_task", key: key});
+    }
+
+    function getTabItemKey(elem) {
         var classes = elem.attr("class").split(" ");
         for (i in classes){
-            var class = classes[i];
-            if (class.indexOf("key_") == 0){
-                class = class.replace("key_","");
-                $(".Containers > .container").hide();
-                $(".container_"+class).show();
+            var className = classes[i];
+            if (className.indexOf("key_") == 0) {
+                return className.replace("key_","");
             }
         }
     }
